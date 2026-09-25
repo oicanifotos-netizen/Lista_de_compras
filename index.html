@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Compras & Histórico Inteligente</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkblue: {
+                            900: '#0b131d', // Fundo principal escuro azulado
+                            800: '#111d2d', // Cards e painéis
+                            700: '#1d2c42', // Bordas e divisores
+                            600: '#283d5a', // Elementos de hover
+                            accent: '#3b82f6', // Azul principal moderno
+                            accentHover: '#2563eb'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome para Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Tesseract.js para OCR (Leitura de texto/preço por foto direto no navegador) -->
+    <script src="https://unpkg.com/tesseract.js@v4.0.2/dist/tesseract.min.js"></script>
+</head>
+<body class="bg-darkblue-900 text-slate-100 min-h-screen font-sans antialiased pb-28">
+
+    <!-- Cabeçalho -->
+    <header class="bg-darkblue-800/80 backdrop-blur-md border-b border-darkblue-700 sticky top-0 z-30 shadow-lg">
+        <div class="max-w-xl mx-auto px-4 py-3.5 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-darkblue-accent/20 p-2.5 rounded-xl text-darkblue-accent">
+                    <i class="fa-solid fa-cart-shopping text-base"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base leading-tight text-white">Compras Mensais</h1>
+                    <p class="text-xs text-slate-400" id="current-month-label">Carregando...</p>
+                </div>
+            </div>
+            
+            <button onclick="abrirModalAdicionar()" class="bg-darkblue-accent hover:bg-darkblue-accentHover text-white font-medium text-xs px-3.5 py-2 rounded-xl transition shadow-md flex items-center space-x-1.5">
+                <i class="fa-solid fa-plus text-xs"></i>
+                <span>Novo Item</span>
+            </button>
+        </div>
+
+        <!-- Abas de Navegação -->
+        <div class="max-w-xl mx-auto px-4 flex space-x-2 border-t border-darkblue-700/60 pt-2 pb-2">
+            <button onclick="mudarAba('lista')" id="tab-lista" class="flex-1 py-2 px-3 text-xs font-bold rounded-xl transition bg-darkblue-accent text-white shadow-sm flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-list-check"></i>
+                <span>Lista de Compras</span>
+            </button>
+            <button onclick="mudarAba('historico')" id="tab-historico" class="flex-1 py-2 px-3 text-xs font-semibold rounded-xl transition bg-darkblue-700/50 text-slate-300 hover:bg-darkblue-700 hover:text-white flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Histórico de Preços</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Resumo e Barra de Progresso -->
+    <div id="resumo-container" class="max-w-xl mx-auto px-4 mt-4">
+        <div class="bg-darkblue-800 border border-darkblue-700 rounded-2xl p-4 shadow-sm">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Progresso de Compra</span>
+                <span id="progress-text" class="text-xs font-bold text-darkblue-accent">0 / 0 itens (0%)</span>
+            </div>
+            <div class="w-full bg-darkblue-900 rounded-full h-2 overflow-hidden">
+                <div id="progress-bar" class="bg-darkblue-accent h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between items-center mt-3 pt-3 border-t border-darkblue-700/60 text-xs text-slate-300">
+                <span>Total Gasto (Itens Comprados):</span>
+                <span id="total-spent" class="font-bold text-emerald-400 text-sm">R$ 0,00</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main class="max-w-xl mx-auto px-4 mt-4">
+        <!-- Aba 1: Lista de Compras -->
+        <div id="view-lista" class="space-y-4">
+            <!-- Renderizado dinamicamente via script -->
+        </div>
+
+        <!-- Aba 2: Histórico de Preços -->
+        <div id="view-historico" class="space-y-4 hidden">
+            <div class="bg-darkblue-800 border border-darkblue-700 rounded-2xl p-4 shadow-sm">
+                <h2 class="font-bold text-sm text-slate-200 mb-1"><i class="fa-solid fa-clock-rotate-left text-darkblue-accent mr-2"></i>Acompanhamento de Preços Mês a Mês</h2>
+                <p class="text-xs text-slate-400 mb-4">Veja o histórico de valores pagos por cada item nos últimos meses.</p>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="border-b border-darkblue-700 text-slate-400">
+                                <th class="py-2.5 px-2">Item</th>
+                                <th class="py-2.5 px-2 text-center">Jan/2026</th>
+                                <th class="py-2.5 px-2 text-center">Fev/2026</th>
+                                <th class="py-2.5 px-2 text-center">Mar/2026</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-historico-corpo">
+                            <!-- Preenchido via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Indicador de Processamento de IA / OCR -->
+    <div id="loading-overlay" class="fixed inset-0 bg-darkblue-900/80 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center space-y-3">
+        <div class="w-12 h-12 border-4 border-darkblue-accent border-t-transparent rounded-full animate-spin"></div>
+        <p id="loading-text" class="text-sm font-semibold text-white">Lendo preço da foto com Inteligência Artificial...</p>
+    </div>
+
+    <!-- Input de arquivo invisível para captura de foto -->
+    <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="processarFotoPreco(event)">
+
+    <!-- Modal Adicionar / Editar Item -->
+    <div id="item-modal" class="fixed inset-0 bg-darkblue-900/80 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-darkblue-800 border border-darkblue-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-darkblue-700 pb-3">
+                <h3 id="modal-title" class="font-bold text-base text-white">Adicionar Novo Item</h3>
+                <button onclick="fecharModal()" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <form id="item-form" onsubmit="salvarItem(event)" class="space-y-4">
+                <input type="hidden" id="item-id">
+                
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Nome do Item</label>
+                    <input type="text" id="item-name" required placeholder="Ex: Arroz 5kg" class="w-full bg-darkblue-900 border border-darkblue-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-darkblue-accent transition">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Categoria</label>
+                    <select id="item-category" class="w-full bg-darkblue-900 border border-darkblue-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-darkblue-accent transition">
+                        <option value="hortifruti">Hortifrúti & Frutas</option>
+                        <option value="acougue">Açougue & Carnes</option>
+                        <option value="dispensa">Dispensa & Secos</option>
+                        <option value="laticinios">Laticínios & Frios</option>
+                        <option value="limpeza">Limpeza & Utilidades</option>
+                        <option value="higiene">Higiene Pessoal</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+
+                <div class="flex space-x-3 pt-2">
+                    <button type="button" onclick="fecharModal()" class="flex-1 bg-darkblue-700 hover:bg-darkblue-600 text-slate-300 font-medium py-2.5 rounded-xl text-sm transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="flex-1 bg-darkblue-accent hover:bg-darkblue-accentHover text-white font-medium py-2.5 rounded-xl text-sm transition shadow-md">
+                        Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script>
+        const categoriasInfo = {
+            hortifruti: { nome: 'Hortifrúti & Frutas', icone: 'fa-carrot', cor: 'text-amber-400' },
+            acougue: { nome: 'Açougue & Carnes', icone: 'fa-drumstick-bite', cor: 'text-rose-400' },
+            dispensa: { nome: 'Dispensa & Secos', icone: 'fa-box-archive', cor: 'text-sky-400' },
+            laticinios: { nome: 'Laticínios & Frios', icone: 'fa-cheese', cor: 'text-yellow-400' },
+            limpeza: { nome: 'Limpeza & Utilidades', icone: 'fa-spray-can-sparkles', cor: 'text-teal-400' },
+            higiene: { nome: 'Higiene Pessoal', icone: 'fa-pump-soap', cor: 'text-purple-400' },
+            outros: { nome: 'Outros', icone: 'fa-basket-shopping', cor: 'text-slate-400' }
+        };
+
+        const itensIniciais = [
+            // Dispensa
+            { id: '1', nome: 'Arroz 🍚 5 kilos', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: { '2026-03': 28.90 } },
+            { id: '2', nome: 'Feijão Pantera 🫘 3 kilos', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: { '2026-03': 18.50 } },
+            { id: '3', nome: 'Pão de forma', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '4', nome: 'Granola', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '5', nome: 'Bolo avelã', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '6', nome: 'Vinagre de maçã', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '7', nome: 'Azeite pequeno', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '8', nome: 'Chás', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '9', nome: 'Óleo', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '10', nome: 'Macarrão 4 pacotes', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '11', nome: 'Farofa', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '12', nome: 'Açúcar 2 kg', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '13', nome: 'Ketchup', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '14', nome: 'Bolacha de arroz', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '15', nome: 'Leite integral em pó 🥛', categoria: 'dispensa', status: 'pendente', quantidade: 1, precos: {} },
+
+            // Açougue
+            { id: '16', nome: 'Bacon 🥓', categoria: 'acougue', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '17', nome: 'Carnes', categoria: 'acougue', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '18', nome: 'PLinguiça para feijão', categoria: 'acougue', status: 'pendente', quantidade: 1, precos: {} },
+
+            // Hortifrúti
+            { id: '19', nome: 'Batata doce', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '20', nome: 'Batata', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '21', nome: 'Cenoura', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '22', nome: 'Legumes', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '23', nome: 'Cebola 🧅', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '24', nome: 'Alho 🧄', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '25', nome: 'Frutas', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '26', nome: 'Limão 🍋', categoria: 'hortifruti', status: 'pendente', quantidade: 1, precos: {} },
+
+            // Laticínios
+            { id: '27', nome: 'Requeijão', categoria: 'laticinios', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '28', nome: 'Mostarda', categoria: 'laticinios', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '29', nome: 'Queijo ralado', categoria: 'laticinios', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '30', nome: 'Leite', categoria: 'laticinios', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '31', nome: 'Creme de leite 2un', categoria: 'laticinios', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '32', nome: 'Manteiga', categoria: 'laticinios', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '33', nome: 'Queijo ralado Presidente 2 uni', categoria: 'laticinios', status: 'pendente', quantidade: 1, precos: {} },
+
+            // Limpeza
+            { id: '34', nome: 'Uau com cloro ativo', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '35', nome: 'Uau desengordurante', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '36', nome: 'Esponja louça- Azul', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '37', nome: 'Bucha lava louças', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '38', nome: 'Detergente 4 frascos', categoria: 'limpeza', status: 'pendente', quantidade: 4, precos: {} },
+            { id: '39', nome: 'Cândida 1lt', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '40', nome: 'Papel higiênico', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '41', nome: 'Papel toalha', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '42', nome: 'Papel aluminio', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '43', nome: 'Sabão líquido para roupas (Tixan)', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '44', nome: 'Sabão líquido para banheiro', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '45', nome: 'Cheirinho do banheiro', categoria: 'limpeza', status: 'pendente', quantidade: 1, precos: {} },
+
+            // Higiene
+            { id: '46', nome: 'Antitranspirante', categoria: 'higiene', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '47', nome: 'Pasta de dente 1 tubo grande', categoria: 'higiene', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '48', nome: 'Sabonetes 6 unidades', categoria: 'higiene', status: 'pendente', quantidade: 6, precos: {} },
+            { id: '49', nome: 'Sabão líquido para mãos', categoria: 'higiene', status: 'pendente', quantidade: 1, precos: {} },
+            { id: '50', nome: 'Fralda d’água', categoria: 'higiene', status: 'pendente', quantidade: 1, precos: {} }
+        ];
+
+        let listaCompras = JSON.parse(localStorage.getItem('lista_compras_v5')) || itensIniciais;
+        const mesAtualChave = '2026-03';
+        let itemIdFotoAtual = null;
+        document.getElementById('current-month-label').innerText = `Referência: Março/2026`;
+
+        function mudarAba(aba) {
+            const btnLista = document.getElementById('tab-lista');
+            const btnHistorico = document.getElementById('tab-historico');
+            const viewLista = document.getElementById('view-lista');
+            const viewHistorico = document.getElementById('view-historico');
+            const resumoContainer = document.getElementById('resumo-container');
+
+            if (aba === 'lista') {
+                btnLista.className = "flex-1 py-2 px-3 text-xs font-bold rounded-xl transition bg-darkblue-accent text-white shadow-sm flex items-center justify-center space-x-2";
+                btnHistorico.className = "flex-1 py-2 px-3 text-xs font-semibold rounded-xl transition bg-darkblue-700/50 text-slate-300 hover:bg-darkblue-700 hover:text-white flex items-center justify-center space-x-2";
+                viewLista.classList.remove('hidden');
+                viewHistorico.classList.add('hidden');
+                resumoContainer.classList.remove('hidden');
+            } else {
+                btnHistorico.className = "flex-1 py-2 px-3 text-xs font-bold rounded-xl transition bg-darkblue-accent text-white shadow-sm flex items-center justify-center space-x-2";
+                btnLista.className = "flex-1 py-2 px-3 text-xs font-semibold rounded-xl transition bg-darkblue-700/50 text-slate-300 hover:bg-darkblue-700 hover:text-white flex items-center justify-center space-x-2";
+                viewHistorico.classList.remove('hidden');
+                viewLista.classList.add('hidden');
+                resumoContainer.classList.add('hidden');
+                renderizarHistorico();
+            }
+        }
+
+        function salvarDados() {
+            localStorage.setItem('lista_compras_v5', JSON.stringify(listaCompras));
+            renderizarApp();
+        }
+
+        function atualizarStatus(id, novoStatus) {
+            const item = listaCompras.find(i => i.id === id);
+            if (item) {
+                item.status = novoStatus;
+                salvarDados();
+            }
+        }
+
+        function atualizarQuantidade(id, novaQtd) {
+            const item = listaCompras.find(i => i.id === id);
+            if (item) {
+                item.quantidade = parseInt(novaQtd);
+                salvarDados();
+            }
+        }
+
+        function atualizarPrecoMesAtual(id, valorStr) {
+            const item = listaCompras.find(i => i.id === id);
+            if (item) {
+                if (!item.precos) item.precos = {};
+                const val = parseFloat(valorStr.replace(',', '.'));
+                if (isNaN(val) || valorStr.trim() === '') {
+                    delete item.precos[mesAtualChave];
+                } else {
+                    item.precos[mesAtualChave] = val;
+                }
+                salvarDadosSilencioso();
+            }
+        }
+
+        function salvarDadosSilencioso() {
+            localStorage.setItem('lista_compras_v5', JSON.stringify(listaCompras));
+            calcularTotais();
+        }
+
+        function calcularTotais() {
+            let totalItens = listaCompras.filter(i => i.status !== 'nao_necessario').length;
+            let itensComprados = listaCompras.filter(i => i.status === 'comprado').length;
+            let valorGeral = 0;
+
+            listaCompras.forEach(item => {
+                if (item.status === 'comprado' && item.precos && item.precos[mesAtualChave]) {
+                    const qtd = item.quantidade || 1;
+                    valorGeral += (item.precos[mesAtualChave] * qtd);
+                }
+            });
+
+            const percentual = totalItens > 0 ? Math.round((itensComprados / totalItens) * 100) : 0;
+            document.getElementById('progress-text').innerText = `${itensComprados} / ${totalItens} itens válidos (${percentual}%)`;
+            document.getElementById('progress-bar').style.width = `${percentual}%`;
+            document.getElementById('total-spent').innerText = valorGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function dispararCamera(id) {
+            itemIdFotoAtual = id;
+            document.getElementById('camera-input').click();
+        }
+
+        async function processarFotoPreco(event) {
+            const file = event.target.files[0];
+            if (!file || !itemIdFotoAtual) return;
+
+            const overlay = document.getElementById('loading-overlay');
+            const loadingText = document.getElementById('loading-text');
+            overlay.classList.remove('hidden');
+            loadingText.innerText = "Analisando imagem com inteligência artificial...";
+
+            try {
+                const result = await Tesseract.recognize(file, 'por+eng', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            loadingText.innerText = `Lendo foto: ${Math.round(m.progress * 100)}%`;
+                        }
+                    }
+                });
+
+                const textoExtraido = result.data.text;
+                const regexPrecos = /(?:R\$\s*)?(\d{1,4}[.,]\d{2})/g;
+                const correspondencias = [...textoExtraido.matchAll(regexPrecos)];
+
+                if (correspondencias.length > 0) {
+                    const precoEncontradoStr = correspondencias[0][1].replace(',', '.');
+                    const precoNum = parseFloat(precoEncontradoStr);
+
+                    if (!isNaN(precoNum)) {
+                        const inputEl = document.getElementById(`preco-input-${itemIdFotoAtual}`);
+                        if (inputEl) {
+                            inputEl.value = precoNum.toFixed(2).replace('.', ',');
+                        }
+                        atualizarPrecoMesAtual(itemIdFotoAtual, precoNum.toString());
+                        alert(`Preço detectado com sucesso: R$ ${precoNum.toFixed(2).replace('.', ',')}`);
+                    } else {
+                        alert('Não foi possível identificar um valor numérico claro na foto. Tente tirar outra foto mais próxima da etiqueta.');
+                    }
+                } else {
+                    alert('Nenhum preço legível encontrado na foto. Tente aproximar da etiqueta.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Ocorreu um erro ao processar a imagem.');
+            } finally {
+                overlay.classList.add('hidden');
+                event.target.value = '';
+                itemIdFotoAtual = null;
+            }
+        }
+
+        function abrirModalAdicionar() {
+            document.getElementById('modal-title').innerText = 'Adicionar Novo Item';
+            document.getElementById('item-id').value = '';
+            document.getElementById('item-name').value = '';
+            document.getElementById('item-category').value = 'dispensa';
+            document.getElementById('item-modal').classList.remove('hidden');
+        }
+
+        function fecharModal() {
+            document.getElementById('item-modal').classList.add('hidden');
+        }
+
+        function salvarItem(e) {
+            e.preventDefault();
+            const nome = document.getElementById('item-name').value;
+            const categoria = document.getElementById('item-category').value;
+
+            const novoItem = {
+                id: Date.now().toString(),
+                nome,
+                categoria,
+                status: 'pendente',
+                quantidade: 1,
+                precos: {}
+            };
+            listaCompras.push(novoItem);
+            fecharModal();
+            salvarDados();
+        }
+
+        function deletarItem(id) {
+            if (confirm('Deseja realmente remover este item?')) {
+                listaCompras = listaCompras.filter(i => i.id !== id);
+                salvarDados();
+            }
+        }
+
+        function renderizarApp() {
+            const container = document.getElementById('view-lista');
+            container.innerHTML = '';
+
+            calcularTotais();
+
+            Object.keys(categoriasInfo).forEach(catKey => {
+                const itensCat = listaCompras.filter(i => i.categoria === catKey);
+                if (itensCat.length === 0) return;
+
+                const info = categoriasInfo[catKey];
+                let htmlItens = '';
+
+                itensCat.forEach(item => {
+                    const precoAtualVal = item.precos && item.precos[mesAtualChave] ? item.precos[mesAtualChave] : '';
+                    const statusAtual = item.status || 'pendente';
+                    const qtdAtual = item.quantidade || 1;
+
+                    let estiloTexto = 'text-slate-200';
+                    if (statusAtual === 'comprado') estiloTexto = 'line-through text-slate-500';
+                    if (statusAtual === 'nao_necessario') estiloTexto = 'text-slate-500 italic opacity-75';
+
+                    // Gerar opções de quantidade de 1 a 10
+                    let optionsQtd = '';
+                    for (let q = 1; q <= 10; q++) {
+                        optionsQtd += `<option value="${q}" ${qtdAtual === q ? 'selected' : ''}>Qtd: ${q}</option>`;
+                    }
+
+                    htmlItens += `
+                        <div class="py-3 px-3 rounded-xl hover:bg-darkblue-700/30 transition group border-b border-darkblue-700/20 last:border-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                            <div class="flex items-center space-x-3 flex-1">
+                                <span class="text-sm ${estiloTexto} flex-1">${item.nome}</span>
+                            </div>
+                            
+                            <div class="flex items-center space-x-1.5 sm:space-x-2 justify-end flex-wrap">
+                                <!-- Lista suspensa de status -->
+                                <select onchange="atualizarStatus('${item.id}', this.value)" 
+                                    class="bg-darkblue-900 border border-darkblue-700 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-darkblue-accent">
+                                    <option value="pendente" ${statusAtual === 'pendente' ? 'selected' : ''}>Pendente</option>
+                                    <option value="comprado" ${statusAtual === 'comprado' ? 'selected' : ''}>Comprado</option>
+                                    <option value="nao_necessario" ${statusAtual === 'nao_necessario' ? 'selected' : ''}>Não necessário</option>
+                                </select>
+
+                                <!-- Lista suspensa de Quantidade (1 a 10) -->
+                                <select onchange="atualizarQuantidade('${item.id}', this.value)" 
+                                    class="bg-darkblue-900 border border-darkblue-700 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-darkblue-accent font-mono">
+                                    ${optionsQtd}
+                                </select>
+
+                                <!-- Input de valor -->
+                                <input type="number" step="0.01" id="preco-input-${item.id}" placeholder="R$ 0,00" value="${precoAtualVal}"
+                                    oninput="atualizarPrecoMesAtual('${item.id}', this.value)"
+                                    class="bg-darkblue-900 border border-darkblue-700 rounded-lg px-2.5 py-1.5 text-xs text-white w-20 text-right focus:outline-none focus:border-darkblue-accent">
+
+                                <!-- Botão de Foto / Câmera -->
+                                <button onclick="dispararCamera('${item.id}')" title="Tirar foto da etiqueta para validar o preço"
+                                    class="bg-darkblue-700 hover:bg-darkblue-accent text-slate-200 hover:text-white p-1.5 rounded-lg transition">
+                                    <i class="fa-solid fa-camera text-xs"></i>
+                                </button>
+
+                                <button onclick="deletarItem('${item.id}')" class="text-slate-600 hover:text-rose-400 transition opacity-0 group-hover:opacity-100 p-1">
+                                    <i class="fa-solid fa-trash-can text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                const cardCat = `
+                    <div class="bg-darkblue-800 border border-darkblue-700 rounded-2xl p-4 shadow-sm">
+                        <div class="flex items-center space-x-2 mb-3 pb-2 border-b border-darkblue-700/60">
+                            <i class="fa-solid ${info.icone} ${info.cor} text-sm"></i>
+                            <h2 class="font-bold text-sm text-slate-200">${info.nome}</h2>
+                            <span class="text-xs text-slate-500 ml-auto font-mono">(${itensCat.filter(i => i.status === 'comprado').length}/${itensCat.length})</span>
+                        </div>
+                        <div class="space-y-1">
+                            ${htmlItens}
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += cardCat;
+            });
+        }
+
+        function renderizarHistorico() {
+            const corpoTabela = document.getElementById('tabela-historico-corpo');
+            corpoTabela.innerHTML = '';
+
+            listaCompras.forEach(item => {
+                const pJan = item.precos && item.precos['2026-01'] ? Number(item.precos['2026-01']).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+                const pFev = item.precos && item.precos['2026-02'] ? Number(item.precos['2026-02']).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+                const pMar = item.precos && item.precos['2026-03'] ? Number(item.precos['2026-03']).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+
+                corpoTabela.innerHTML += `
+                    <tr class="border-b border-darkblue-700/40 hover:bg-darkblue-700/20">
+                        <td class="py-2.5 px-2 font-medium text-slate-200">${item.nome}</td>
+                        <td class="py-2.5 px-2 text-center text-slate-400">${pJan}</td>
+                        <td class="py-2.5 px-2 text-center text-slate-400">${pFev}</td>
+                        <td class="py-2.5 px-2 text-center font-semibold text-emerald-400">${pMar}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        renderizarApp();
+    </script>
+</body>
+</html>
